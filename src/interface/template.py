@@ -4,6 +4,8 @@ from typing import Coroutine
 from typing import TYPE_CHECKING
 from typing import Type
 from typing import Union
+from urllib.parse import quote
+from urllib.parse import urlencode
 
 from httpx import AsyncClient
 from rich.progress import (
@@ -13,20 +15,17 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from src.custom import PROGRESS
-from src.custom import USERAGENT
-from src.custom import wait
-from src.tools import PrivateRetry
-from src.tools import TikTokDownloaderError
-from src.tools import capture_error_request
-
-# from urllib.parse import quote
-
-# from urllib.parse import urlencode
+from ..custom import PROGRESS
+from ..custom import USERAGENT
+from ..custom import wait
+from ..tools import PrivateRetry
+from ..tools import TikTokDownloaderError
+from ..tools import capture_error_request
+from ..translation import _
 
 if TYPE_CHECKING:
-    from src.config import Parameter
-    from src.testers import Params
+    from ..config import Parameter
+    from ..testers import Params
 
 __all__ = ["API", "APITikTok", ]
 
@@ -41,6 +40,7 @@ class API:
         "channel": "channel_pc_web",
         "update_version_code": "170400",
         "pc_client_type": "1",
+        "pc_libra_divert": "Windows",
         "version_code": "290100",
         "version_name": "29.1.0",
         "cookie_enabled": "true",
@@ -62,6 +62,7 @@ class API:
         "effective_type": "4g",
         "round_trip_time": "200",
         # "webid": "",
+        "uifid": "",
         "msToken": "",
     }
 
@@ -72,13 +73,13 @@ class API:
             proxy: str = None,
             *args,
             **kwargs):
-        self.headers = params.headers
+        self.headers = params.headers.copy()
         self.log = params.logger
         self.ab = params.ab
         self.xb = params.xb
         self.console = params.console
         self.api = ""
-        self.proxy = params.extract_proxy(proxy)
+        self.proxy = proxy
         self.max_retry = params.max_retry
         self.timeout = params.timeout
         self.cookie = cookie or params.cookie
@@ -100,20 +101,21 @@ class API:
     def generate_data(self, *args, **kwargs) -> dict:
         return {}
 
-    async def run(self,
-                  referer: str = None,
-                  single_page=False,
-                  data_key: str = "",
-                  error_text="",
-                  cursor="cursor",
-                  has_more="has_more",
-                  params: Callable = lambda: {},
-                  data: Callable = lambda: {},
-                  method="GET",
-                  headers: dict = None,
-                  *args,
-                  **kwargs,
-                  ):
+    async def run(
+            self,
+            referer: str = None,
+            single_page=False,
+            data_key: str = "",
+            error_text="",
+            cursor="cursor",
+            has_more="has_more",
+            params: Callable = lambda: {},
+            data: Callable = lambda: {},
+            method="GET",
+            headers: dict = None,
+            *args,
+            **kwargs,
+    ):
         self.set_referer(referer)
         match single_page:
             case True:
@@ -146,18 +148,19 @@ class API:
                 raise TikTokDownloaderError
         return self.response
 
-    async def run_single(self,
-                         data_key: str,
-                         error_text="",
-                         cursor="cursor",
-                         has_more="has_more",
-                         params: Callable = lambda: {},
-                         data: Callable = lambda: {},
-                         method="GET",
-                         headers: dict = None,
-                         *args,
-                         **kwargs,
-                         ):
+    async def run_single(
+            self,
+            data_key: str,
+            error_text="",
+            cursor="cursor",
+            has_more="has_more",
+            params: Callable = lambda: {},
+            data: Callable = lambda: {},
+            method="GET",
+            headers: dict = None,
+            *args,
+            **kwargs,
+    ):
         if data := await self.request_data(
                 self.api,
                 params=params() or self.generate_params(),
@@ -175,23 +178,26 @@ class API:
                 *args,
                 **kwargs)
         else:
-            self.log.warning(f"获取{self.text}失败")
+            self.log.warning(_("获取{self_text}数据失败").format(self_text=self.text))
 
-    async def run_batch(self,
-                        data_key: str,
-                        error_text="",
-                        cursor="cursor",
-                        has_more="has_more",
-                        params: Callable = lambda: {},
-                        data: Callable = lambda: {},
-                        method="GET",
-                        headers: dict = None,
-                        callback: Type[Coroutine] = None,
-                        *args,
-                        **kwargs, ):
+    async def run_batch(
+            self,
+            data_key: str,
+            error_text="",
+            cursor="cursor",
+            has_more="has_more",
+            params: Callable = lambda: {},
+            data: Callable = lambda: {},
+            method="GET",
+            headers: dict = None,
+            callback: Type[Coroutine] = None,
+            *args,
+            **kwargs, ):
         with self.progress_object() as progress:
             task_id = progress.add_task(
-                f"正在获取{self.text}", total=None)
+                _("正在获取{text}数据").format(text=self.text),
+                total=None,
+            )
             while not self.finished and self.pages > 0:
                 progress.update(task_id)
                 await self.run_single(
@@ -210,85 +216,124 @@ class API:
                 if callback:
                     await callback()
 
-    def check_response(self,
-                       data_dict: dict,
-                       data_key: str,
-                       error_text="",
-                       cursor="cursor",
-                       has_more="has_more",
-                       *args,
-                       **kwargs,
-                       ):
+    def check_response(
+            self,
+            data_dict: dict,
+            data_key: str,
+            error_text="",
+            cursor="cursor",
+            has_more="has_more",
+            *args,
+            **kwargs,
+    ):
         try:
             if not (d := data_dict[data_key]):
-                self.log.info(error_text)
+                self.log.warning(error_text)
                 self.finished = True
             else:
                 self.cursor = data_dict[cursor]
                 self.append_response(d)
                 self.finished = not data_dict[has_more]
         except KeyError:
-            self.log.error(f"数据解析失败，请告知作者处理: {data_dict}")
+            self.log.error(_("数据解析失败，请告知作者处理: {data}").format(data=data_dict))
             self.finished = True
 
     def set_referer(self, url: str = None) -> None:
         self.headers["Referer"] = url or self.referer
 
-    async def request_data(self,
-                           url: str,
-                           params: dict = None,
-                           data: dict = None,
-                           method="GET",
-                           headers: dict = None,
-                           encryption="GET",
-                           finished=False,
-                           *args,
-                           **kwargs,
-                           ):
-        self.deal_url_params(params, encryption, )
+    async def request_data(
+            self,
+            url: str,
+            params: dict = None,
+            data: dict = None,
+            method="GET",
+            headers: dict = None,
+            encryption="GET",
+            finished=False,
+            *args,
+            **kwargs,
+    ):
+        params = self.deal_url_params(params, encryption, )
         match method:
             case "GET":
-                return await self.__request_data_get(url, params, headers or self.headers,
-                                                     finished=finished, *args, **kwargs)
+                return await self.__request_data_get(
+                    url,
+                    params,
+                    headers or self.headers,
+                    finished=finished,
+                    *args,
+                    **kwargs,
+                )
             case "POST":
-                return await self.__request_data_post(url, params, data, headers or self.headers,
-                                                      finished=finished, *args, **kwargs)
+                return await self.__request_data_post(
+                    url,
+                    params,
+                    data,
+                    headers or self.headers,
+                    finished=finished,
+                    *args,
+                    **kwargs,
+                )
             case _:
-                raise TikTokDownloaderError(f"尚未支持的请求方法 {method}")
+                raise TikTokDownloaderError
 
     @PrivateRetry.retry
     @capture_error_request
-    async def __request_data_get(self,
-                                 url: str,
-                                 params: dict,
-                                 headers: dict,
-                                 finished=False,
-                                 **kwargs,
-                                 ):
+    async def __request_data_get(
+            self,
+            url: str,
+            params: str,
+            headers: dict,
+            finished=False,
+            **kwargs,
+    ):
         # TODO: 临时代理未生效
-        self.__record_request_messages(url, params, None, headers, **kwargs, )
-        response = await self.client.get(url, params=params, headers=headers, **kwargs)
+        self.__record_request_messages(
+            url,
+            params,
+            None,
+            headers,
+            **kwargs,
+        )
+        response = await self.client.get(
+            f"{url}?{params}",
+            headers=headers,
+            **kwargs,
+        )
         return await self.__return_response(response)
 
     @PrivateRetry.retry
     @capture_error_request
-    async def __request_data_post(self,
-                                  url: str,
-                                  params: dict,
-                                  data: dict,
-                                  headers: dict,
-                                  finished=False,
-                                  **kwargs):
+    async def __request_data_post(
+            self,
+            url: str,
+            params: str,
+            data: dict,
+            headers: dict,
+            finished=False,
+            **kwargs):
         # TODO: 临时代理未生效
-        self.__record_request_messages(url, params, data, headers, **kwargs, )
-        response = await self.client.post(url, params=params, data=data, headers=headers, **kwargs)
+        self.__record_request_messages(
+            url,
+            params,
+            data,
+            headers,
+            **kwargs,
+        )
+        response = await self.client.post(
+            f"{url}?{params}",
+            data=data,
+            headers=headers,
+            **kwargs,
+        )
         return await self.__return_response(response)
 
     async def __return_response(self, response):
         self.log.info(f"Response URL: {response.url}", False)
         self.log.info(f"Response Code: {response.status_code}", False)
         self.log.info(f"Response Headers: {dict(response.headers)}", False)
-        self.log.info(f"Response Content: {response.content}", False)
+        # 记录请求体数据会导致日志文件体积过大，仅在必要时记录
+        # self.log.info(f"Response Content: {response.content}", False)
         response.raise_for_status()
         await wait()
         # if response.status_code != 200:
@@ -299,7 +344,7 @@ class API:
     def __record_request_messages(
             self,
             url: str,
-            params: dict | None,
+            params: str | None,
             data: dict | None,
             headers: dict,
             **kwargs,
@@ -312,14 +357,15 @@ class API:
         self.log.info(f"Headers: {desensitize}", False)
         self.log.info(f"Other: {kwargs}", False)
 
-    def deal_url_params(self, params: dict, method="GET", **kwargs, ):
+    def deal_url_params(self, params: dict, method="GET", **kwargs, ) -> str:
         if params:
-            params["a_bogus"] = self.ab.get_value(params, method, )
-            # params["a_bogus"] = self.ab.generate_abogus(
-            #     urlencode(params), method, )[1]
+            params = urlencode(params, quote_via=quote, )
+            params += f"&a_bogus={self.ab.get_value(params, method, )}"
+            return params
+        return ""
 
     def summary_works(self, ) -> None:
-        self.log.info(f"共获取到 {len(self.response)} 个{self.text}")
+        self.log.info(_("共获取到 {count} 个{text}").format(count=len(self.response), text=self.text))
 
     def progress_object(self):
         return Progress(
@@ -352,7 +398,7 @@ class API:
 class APITikTok(API):
     domain = "https://www.tiktok.com/"
     short_domain = ""
-    referer = domain
+    referer = f"{domain}explore"
     params = {
         "WebIdLastTime": int(time()),
         "aid": "1988",
@@ -362,10 +408,11 @@ class APITikTok(API):
         "browser_name": "Mozilla",
         "browser_online": "true",
         "browser_platform": "Win32",
-        "browser_version": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 "
+        "browser_version": "5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 "
                            "Safari/537.36",
         "channel": "tiktok_web",
         "cookie_enabled": "true",
+        "data_collection_enabled": "true",
         "device_id": "",
         "device_platform": "web_pc",
         "focus_state": "true",
@@ -381,7 +428,7 @@ class APITikTok(API):
         "screen_height": "864",
         "screen_width": "1536",
         "tz_name": "Asia/Shanghai",
-        # "userId": "",
+        "user_is_login": "true",
         "webcast_language": "en",
         "msToken": "",
     }
@@ -394,22 +441,23 @@ class APITikTok(API):
                  **kwargs,
                  ):
         super().__init__(params, cookie, proxy, *args, **kwargs, )
-        self.headers = params.headers_tiktok
+        self.headers = params.headers_tiktok.copy()
         self.cookie = cookie or params.cookie_tiktok
         self.client: AsyncClient = params.client_tiktok
         self.set_temp_cookie(cookie)
 
-    async def request_data(self,
-                           url: str,
-                           params: dict = None,
-                           data: dict = None,
-                           method="GET",
-                           headers: dict = None,
-                           encryption=8,
-                           finished=False,
-                           *args,
-                           **kwargs,
-                           ):
+    async def request_data(
+            self,
+            url: str,
+            params: dict = None,
+            data: dict = None,
+            method="GET",
+            headers: dict = None,
+            encryption=8,
+            finished=False,
+            *args,
+            **kwargs,
+    ):
         return await super().request_data(
             url=url,
             params=params,
@@ -422,8 +470,11 @@ class APITikTok(API):
             **kwargs,
         )
 
-    def deal_url_params(self, params: dict, number=8, **kwargs, ):
+    def deal_url_params(self, params: dict, number=8, **kwargs, ) -> str:
         if params:
-            params["X-Bogus"] = self.xb.get_x_bogus(
+            params = urlencode(params, quote_via=quote, )
+            params += f"&X-Bogus={self.xb.get_x_bogus(
                 params, number, self.headers.get(
-                    "User-Agent", USERAGENT))
+                    "User-Agent", USERAGENT))}"
+            return params
+        return ""

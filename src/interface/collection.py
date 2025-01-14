@@ -3,11 +3,9 @@ from typing import Callable
 from typing import TYPE_CHECKING
 from typing import Union
 
-from src.extract import Extractor
-from src.interface.info import Info
 from src.interface.template import API
 from src.testers import Params
-from src.tools import timestamp
+from src.translation import _
 
 if TYPE_CHECKING:
     from src.config import Parameter
@@ -27,12 +25,11 @@ class Collection(API):
                  ):
         super().__init__(params, cookie, proxy, *args, **kwargs, )
         self.api = f"{self.domain}aweme/v1/web/aweme/listcollection/"
-        self.text = "账号收藏作品数据"
+        self.text = _("账号收藏作品")
         self.count = count
         self.cursor = cursor
         self.pages = pages or params.max_pages
         self.sec_user_id = sec_user_id
-        self.info = Info(params, cookie, proxy, sec_user_id, )
 
     async def run(self,
                   referer: str = "",
@@ -52,7 +49,7 @@ class Collection(API):
             referer or f"{self.domain}user/self?showTab=favorite_collection",
             single_page,
             data_key,
-            error_text or f"获取{self.text}失败",
+            error_text,
             cursor,
             has_more,
             params,
@@ -62,7 +59,7 @@ class Collection(API):
             *args,
             **kwargs,
         )
-        await self.get_owner_data()
+        # await self.get_owner_data()
         return self.response
 
     def generate_params(self, ) -> dict:
@@ -101,32 +98,12 @@ class Collection(API):
             **kwargs,
         )
 
-    async def get_owner_data(self):
-        if not any(self.response):
-            return
-        if self.sec_user_id and (
-                info := Extractor.get_user_info(
-                    await self.info.run())):
-            self.response.append({"author": info})
-        else:
-            temp_data = timestamp()
-            self.log.warning(
-                f"owner_url 参数未设置 或者 获取账号数据失败，本次运行将临时使用 {temp_data} 作为账号昵称和 UID")
-            temp_dict = {
-                "author": {
-                    "nickname": temp_data,
-                    "uid": temp_data,
-                    "sec_uid": self.sec_user_id,
-                }
-            }
-            self.response.append(temp_dict)
 
-
-async def main():
+async def test():
     async with Params() as params:
-        c = Collection(params, pages=2, )
+        c = Collection(params, pages=1, )
         print(await c.run())
 
 
 if __name__ == "__main__":
-    run(main())
+    run(test())

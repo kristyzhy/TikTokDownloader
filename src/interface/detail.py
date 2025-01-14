@@ -4,6 +4,7 @@ from typing import Union
 
 from src.interface.template import API
 from src.testers import Params
+from src.translation import _
 
 if TYPE_CHECKING:
     from src.config import Parameter
@@ -19,7 +20,7 @@ class Detail(API):
         super().__init__(params, cookie, proxy, )
         self.detail_id = detail_id
         self.api = f"{self.domain}aweme/v1/web/aweme/detail/"
-        self.text = "作品数据"
+        self.text = _("作品")
 
     def generate_params(self, ) -> dict:
         return self.params | {
@@ -46,7 +47,7 @@ class Detail(API):
             referer,
             single_page,
             data_key,
-            error_text or f"作品 {self.detail_id} 获取数据失败",
+            error_text,
             cursor,
             has_more,
             params,
@@ -68,8 +69,23 @@ class Detail(API):
                        ):
         try:
             if not (d := data_dict[data_key]):
-                self.log.info(error_text)
+                self.log.warning(error_text)
             else:
                 self.response = d
         except KeyError:
-            self.log.error(f"数据解析失败，请告知作者处理: {data_dict}")
+            self.log.error(_("数据解析失败，请告知作者处理: {data}").format(data=data_dict))
+
+
+async def test():
+    async with Params() as params:
+        i = Detail(
+            params,
+            detail_id="",
+        )
+        print(await i.run())
+
+
+if __name__ == "__main__":
+    from asyncio import run
+
+    run(test())

@@ -6,7 +6,7 @@ from .text import BaseTextLogger
 from .xlsx import XLSXLogger
 
 if TYPE_CHECKING:
-    from src.config import Parameter
+    from ..config import Parameter
 
 __all__ = ["RecordManager"]
 
@@ -212,9 +212,10 @@ class RecordManager:
             parameter: "Parameter",
             folder="",
             type_="detail",
-            blank=False, ):
+            blank=False,
+    ):
         root = parameter.root.joinpath(
-            parameter.CLEANER.filter_name(folder, False, "Data"))
+            parameter.CLEANER.filter_name(folder, "Data"))
         root.mkdir(exist_ok=True)
         params = self.LoggerParams[type_]
         logger = BaseTextLogger if blank else self.DataLogger.get(

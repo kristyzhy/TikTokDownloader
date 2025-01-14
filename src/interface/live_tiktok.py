@@ -5,7 +5,7 @@ from src.interface.template import APITikTok
 from src.testers import Params
 
 if TYPE_CHECKING:
-    from src.config import Parameter
+    from ..config import Parameter
 
 
 class LiveTikTok(APITikTok):
@@ -37,3 +37,18 @@ class LiveTikTok(APITikTok):
             "enter_source": "others-others",
             "room_id": self.room_id,
         }
+
+
+async def test():
+    async with Params() as params:
+        i = LiveTikTok(
+            params,
+            room_id="",
+        )
+        print(await i.run())
+
+
+if __name__ == "__main__":
+    from asyncio import run
+
+    run(test())

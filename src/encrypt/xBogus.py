@@ -4,7 +4,7 @@ from time import time
 from urllib.parse import quote
 from urllib.parse import urlencode
 
-from src.custom import USERAGENT
+from ..custom import USERAGENT
 
 __all__ = ["XBogus", "XBogusTikTok"]
 
@@ -219,12 +219,12 @@ class XBogus:
 
     def get_x_bogus(
             self,
-            query: dict,
+            query: dict | str,
             params=8,
             user_agent=USERAGENT,
             test_time=None):
         timestamp = int(test_time or time())
-        query = self.process_url_path(urlencode(query, quote_via=quote))
+        query = self.process_url_path(urlencode(query, quote_via=quote) if isinstance(query, dict) else query)
         return self.generate_x_bogus(query, params, user_agent, timestamp)
 
 

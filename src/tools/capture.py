@@ -7,9 +7,11 @@ from httpx import NetworkError
 from httpx import RequestError
 from httpx import TimeoutException
 
+from ..translation import _
+
 if TYPE_CHECKING:
-    from src.record import BaseLogger
-    from src.record import LoggerManager
+    from ..record import BaseLogger
+    from ..record import LoggerManager
 
 __all__ = ["capture_error_params", "capture_error_request", ]
 
@@ -22,15 +24,15 @@ def capture_error_params(function):
                 JSONDecodeError,
                 UnicodeDecodeError,
         ):
-            logger.error("响应内容不是有效的 JSON 数据")
+            logger.error(_("响应内容不是有效的 JSON 数据"))
         except HTTPStatusError as e:
-            logger.error(f"响应码异常：{e}")
+            logger.error(_("响应码异常：{error}").format(error=e))
         except NetworkError as e:
-            logger.error(f"网络异常：{e}")
+            logger.error(_("网络异常：{error}").format(error=e))
         except TimeoutException as e:
-            logger.error(f"请求超时：{e}")
+            logger.error(_("请求超时：{error}").format(error=e))
         except RequestError as e:
-            logger.error(f"网络异常：{e}")
+            logger.error(_("网络异常：{error}").format(error=e))
         return None
 
     return inner
@@ -44,15 +46,15 @@ def capture_error_request(function):
                 JSONDecodeError,
                 UnicodeDecodeError
         ):
-            self.log.error("响应内容不是有效的 JSON 数据")
+            self.log.error(_("响应内容不是有效的 JSON 数据，请尝试更新 Cookie！"))
         except HTTPStatusError as e:
-            self.log.error(f"响应码异常：{e}")
+            self.log.error(_("响应码异常：{error}").format(error=e))
         except NetworkError as e:
-            self.log.error(f"网络异常：{e}")
+            self.log.error(_("网络异常：{error}").format(error=e))
         except TimeoutException as e:
-            self.log.error(f"请求超时：{e}")
+            self.log.error(_("请求超时：{error}").format(error=e))
         except RequestError as e:
-            self.log.error(f"网络异常：{e}")
+            self.log.error(_("网络异常：{error}").format(error=e))
         return None
 
     return inner
